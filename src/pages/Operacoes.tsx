@@ -1,0 +1,128 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type { BotStatus, BalanceInfo, TradeRecord, BotConfig } from '../types'
+import ConfigPanel from '../components/ConfigPanel'
+import ScoreBoard from '../components/ScoreBoard'
+import TradeLog from '../components/TradeLog'
+import LiveChart from '../components/LiveChart'
+import LogConsole from '../components/LogConsole'
+import { formatCurrency } from '../lib/currency'
+import { strategyLabel } from '../lib/strategies'
+
+export default function Operacoes() {
+  const [balances, setBalances] = useState<BalanceInfo[]>([])
+  const [status,   setStatus]   = useState<BotStatus | null>(null)
+  const [logs,     setLogs]     = useState<string[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [configOpen, setConfigOpen] = useState(false)
+  const [activeBalance, setActiveBalance] = useState(0)
+  const [displayBalanceId, setDisplayBalanceId] = useState<number | null>(null)
+
+  const addLog = useCallback((msg: string) => setLogs(p => [msg, ...p].slice(0, 200)), [])
+
+  const currency =
+    status?.currency
+    ?? balances.find(b => b.id === displayBalanceId)?.currency
+    ?? balances.find(b => b.type === 'real')?.currency
+    ?? balances[0]?.currency
+    ?? 'BRL'
+
+  const currencyRef = useRef(currency)
+  currencyRef.current = currency
+
+  useEffect(() => {
+    if (!window.manusPro) {
+      setLoading(false)
+      addLog('[ERRO] API Electron indisponível — use npm run dev (não abra só o navegador).')
+      return
+    }
+
+    async function init() {
+      setLoading(true)
+      const bRes = await window.manusPro.sdkBalances()
+      if (bRes.ok && bRes.balances) setBalances(bRes.balances)
+      setStatus(await window.manusPro.botGetStatus())
+      setLoading(false)
+    }
+    init()
+
+    const unsubs = [
+      window.manusPro.on('bot:status',        s  => setStatus(s)),
+      window.manusPro.on('bot:started',        s  => { setStatus(s); addLog('[SISTEMA] Bot iniciado') }),
+      window.manusPro.on('bot:stopped',        s  => { setStatus(s); setDisplayBalanceId(null); addLog('[SISTEMA] Bot parado') }),
+      window.manusPro.on('bot:trade_entered', (t: TradeRecord) =>
+        addLog(`[ENTRADA] ${strategyLabel(t.strategy)} → ${t.direction} ${formatCurrency(t.amount, currencyRef.current)}`)),
+      window.manusPro.on('bot:trade_result',  (t: TradeRecord) =>
+        addLog(`[${t.result}] ${strategyLabel(t.strategy)} ${t.direction} ${t.profit >= 0 ? '+' : ''}${formatCurrency(t.profit, currencyRef.current)}`)),
+      window.manusPro.on('bot:stop_triggered',(d: any) => addLog(`[STOP] ${d.reason}`)),
+      window.manusPro.on('bot:log',           (m: string) => addLog(m)),
+      window.manusPro.on('bot:balance',       (v: number) => setActiveBalance(v)),
+      window.manusPro.on('bot:error',         (e: string) => addLog(`[ERRO] ${e}`)),
+    ]
+    return () => unsubs.forEach(u => u())
+  }, [addLog])
+
+  async function handleStart(config: BotConfig) {
+    setConfigOpen(false)
+    const res = await window.manusPro.botStart(config)
+    if (!res.ok) addLog(`[ERRO] ${res.error}`)
+    else setDisplayBalanceId(config.balanceId)
+  }
+
+  async function handleStop() { await window.manusPro.botStop() }
+
+  const isRunning = status?.running ?? false
+
+  return (
+    <div className="operacoes">
+      {/* Barra de controle */}
+      <div className="operacoes-bar">
+        <div className="operacoes-bar-left">
+          {isRunning && (
+            <>
+              <span className="pair-badge">{status?.activeTicker}</span>
+              <span className="instrument-badge">{status?.instrument?.toUpperCase()}</span>
+              <span className="running-dot active" />
+              <span className="live-badge">● AO VIVO</span>
+            </>
+          )}
+          {!isRunning && <span className="bar-idle">Bot aguardando configuração</span>}
+        </div>
+      </div>
+
+      <div className="operacoes-body">
+        <div className="operacoes-left">
+          <LiveChart activeId={status?.activeId} activeTicker={status?.activeTicker} />
+          <LogConsole logs={logs} />
+        </div>
+        <aside className="operacoes-panel">
+          <ScoreBoard status={status} activeBalance={activeBalance} currency={currency} />
+          <div className="operacoes-panel-actions">
+            {!isRunning ? (
+              <button
+                type="button"
+                className="btn-start btn-start--panel"
+                onClick={() => setConfigOpen(true)}
+                disabled={loading}
+              >
+                ▶ Iniciar Bot
+              </button>
+            ) : (
+              <button type="button" className="btn-stop btn-stop--panel" onClick={handleStop}>
+                ■ Parar Bot
+              </button>
+            )}
+          </div>
+          <TradeLog trades={status?.trades ?? []} currency={currency} />
+        </aside>
+      </div>
+
+      {configOpen && (
+        <ConfigPanel
+          balances={balances}
+          onStart={handleStart}
+          onClose={() => setConfigOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
