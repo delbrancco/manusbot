@@ -112,7 +112,10 @@ window.manusPro = {
       { method: 'POST', body: JSON.stringify({ email }) },
     )
     if (res.ok && res.url) {
-      const popup = window.open(res.url, 'manusbot-broker')
+      const popup = window.open(
+        `/auth/launch#${encodeURIComponent(res.url)}`,
+        'manusbot-broker',
+      )
       if (!popup) {
         return { ok: false, error: 'O navegador bloqueou a janela de login. Permita pop-ups e tente de novo.' }
       }

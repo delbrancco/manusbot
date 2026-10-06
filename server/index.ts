@@ -156,6 +156,24 @@ app.post('/api/auth/exchange', async (req, res) => {
   }
 })
 
+app.get('/auth/launch', (_req, res) => {
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  res.setHeader('Cache-Control', 'no-store')
+  res.type('html').send(`<!doctype html>
+<html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>Broker10</title></head>
+<body><script>
+  var raw = '';
+  try { raw = decodeURIComponent(location.hash.slice(1)); } catch (e) {}
+  var ok = raw.indexOf('https://api.trade.broker10.com/') === 0
+    || raw.indexOf('https://trade.broker10.com/') === 0;
+  if (!ok) {
+    document.body.textContent = 'Link de login inválido.';
+  } else {
+    location.replace(raw);
+  }
+</script></body></html>`)
+})
+
 app.get('/auth/callback', async (req, res) => {
   const session = requireSession(req, res)
   const origin = publicOrigin(req)
