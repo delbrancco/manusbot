@@ -5,8 +5,13 @@
 // renderer via IPC para as chamadas que exigem auth.
 // ════════════════════════════════════════════════════════════════════
 
+import WebSocket from 'ws'
 import { createClient } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './feature-flags'
+
+if (typeof globalThis.WebSocket === 'undefined') {
+  ;(globalThis as any).WebSocket = WebSocket
+}
 
 export const supabaseMain = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
