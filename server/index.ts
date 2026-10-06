@@ -131,7 +131,6 @@ app.post('/api/auth/start', async (req, res) => {
     if (!session.email) {
       return res.json({ ok: false, error: 'Email do usuário não definido — passe pelo acesso antes do login Broker10' })
     }
-    session.sdk.setRedirectUri(callbackUri(req))
     const { url, codeVerifier } = await session.sdk.createAuthUrl()
     session.verifier = codeVerifier
     res.json({ ok: true, url, origin: publicOrigin(req) })
@@ -146,7 +145,6 @@ app.post('/api/auth/exchange', async (req, res) => {
     const code = extractOAuthCode(String(req.body?.code ?? ''))
     if (!code) return res.json({ ok: false, error: 'URL sem código de autorização' })
     if (!session.verifier) return res.json({ ok: false, error: 'Inicie o fluxo de autenticação primeiro' })
-    session.sdk.setRedirectUri(callbackUri(req))
     await session.sdk.exchangeCode(code, session.verifier)
     await session.sdk.connect()
     session.verifier = null
@@ -166,7 +164,6 @@ app.get('/auth/callback', async (req, res) => {
     const code = extractOAuthCode(String(req.query.code ?? ''))
     if (!code) return res.redirect('/?auth=missing_code')
     if (!session.verifier) return res.redirect('/?auth=no_verifier')
-    session.sdk.setRedirectUri(callbackUri(req))
     await session.sdk.exchangeCode(code, session.verifier)
     await session.sdk.connect()
     session.verifier = null

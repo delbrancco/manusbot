@@ -72,11 +72,29 @@ async function refreshSession() {
   return s
 }
 
+const BROKER_CALLBACK_ORIGIN = 'https://claudepro.online'
+
 if (typeof window !== 'undefined') {
   window.addEventListener('message', (ev) => {
-    if (ev.origin !== window.location.origin) return
-    if (ev.data?.channel === 'broker:connected') emit('broker:connected', null)
-    if (ev.data?.channel === 'broker:error') emit('broker:error', ev.data.payload)
+    if (ev.origin === window.location.origin) {
+      if (ev.data?.channel === 'broker:connected') emit('broker:connected', null)
+      if (ev.data?.channel === 'broker:error') emit('broker:error', ev.data.payload)
+      return
+    }
+    if (ev.origin !== BROKER_CALLBACK_ORIGIN) return
+    if (ev.data?.type !== 'manuspro:auth:callback') return
+    const code = ev.data?.params?.code || ev.data?.params?.token
+    if (!code) {
+      emit('broker:error', ev.data?.params?.error_description || ev.data?.params?.error || 'Falha na autenticação')
+      return
+    }
+    void api<{ ok?: boolean; error?: string }>('/api/auth/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }).then((res) => {
+      if (res?.ok) emit('broker:connected', null)
+      else emit('broker:error', res?.error || 'Não foi possível concluir a autenticação')
+    })
   })
 }
 
