@@ -79,6 +79,10 @@ export function getSessionByTicket(ticket: string | undefined | null): Session |
   return getSession(tickets.get(ticket) ?? null)
 }
 
+export function connectedSessions(): Session[] {
+  return [...sessions.values()].filter(s => s.sdk.isConnected())
+}
+
 export function attachClient(session: Session, ws: WebSocket): void {
   session.clients.add(ws)
   ws.on('close', () => session.clients.delete(ws))

@@ -18,6 +18,7 @@ import {
   stopBot,
   type Session,
 } from './session-store'
+import { cleanTicker, openChartStream } from './chart-hub'
 
 const COOKIE = 'mb_sid'
 const EMAIL_COOKIE = 'mb_email'
@@ -278,6 +279,44 @@ app.get('/api/bot/status', (req, res) => {
 app.get('/api/bot/chart-snapshot', (req, res) => {
   const session = requireSession(req, res)
   res.json(session.bot.getChartCandles())
+})
+
+app.get('/api/chart/stream', async (req, res) => {
+  const ticker = cleanTicker(req.query.ticker)
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  }
+
+  if (!ticker) {
+    send('status', { error: 'Ativo inválido.' })
+    res.end()
+    return
+  }
+
+  let release = () => {}
+  const beat = setInterval(() => {
+    if (!res.writableEnded) res.write(': ping\n\n')
+  }, 15000)
+  req.on('close', () => {
+    clearInterval(beat)
+    release()
+  })
+
+  try {
+    const live = await openChartStream(ticker, send, (done) => {
+      release = done
+    })
+    if (!live) res.end()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Falha ao abrir o gráfico'
+    send('status', { error: message })
+  }
 })
 
 app.post('/api/user/email', async (req, res) => {
