@@ -6408,3 +6408,233 @@ select:focus,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ═══ Mobile — coluna estreita como o quadbot (≤860px) ═══ */
+.operacoes-mobile-tabs { display: none; }
+
+@media (max-width: 860px) {
+  html, body, #root, .app-root {
+    height: 100dvh;
+    max-width: 100vw;
+    overflow: hidden;
+  }
+
+  input, select, textarea,
+  .lic-gate-input-wrap input.lic-gate-input,
+  .login-card input,
+  .field input,
+  .config-field input {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .mainapp.members-shell--bottom-nav {
+    flex-direction: row;
+    align-items: stretch;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .members-shell--bottom-nav .members-main {
+    order: 2;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .members-sidebar--bottom {
+    order: 1;
+    width: auto;
+    height: 100%;
+    border-top: none;
+    background: transparent;
+    padding:
+      max(8px, env(safe-area-inset-top, 0px))
+      0
+      max(8px, env(safe-area-inset-bottom, 0px))
+      max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  .members-sidebar-pill--bottom {
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    width: 76px;
+    max-width: 76px;
+    height: 100%;
+    min-height: 0;
+    align-self: stretch;
+    padding: 12px 6px 10px;
+    gap: 8px;
+    border-radius: 22px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-zone,
+  .members-sidebar-pill--bottom .sidebar-zone--nav,
+  .members-sidebar-pill--bottom .sidebar-zone--footer,
+  .members-sidebar-pill--bottom .sidebar-actions,
+  .members-sidebar-pill--bottom .sidebar-actions-tools {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    gap: 8px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-zone--nav {
+    flex: 1 1 auto;
+  }
+
+  .sidebar-brand-text,
+  .members-sidebar-pill--bottom .sidebar-account-meta,
+  .members-sidebar-pill--bottom .sidebar-actions-divider {
+    display: none;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-logo-mark {
+    width: 40px;
+    height: 40px;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-nav-btn {
+    flex-direction: column;
+    width: 100%;
+    height: auto;
+    min-height: 52px;
+    min-width: 0;
+    padding: 6px 2px;
+    gap: 4px;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-nav-label {
+    display: block;
+    font-size: 8px;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+    max-width: 68px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-nav-iconWrap,
+  .members-sidebar-pill--bottom .sidebar-nav-btn--operacoes .sidebar-nav-iconWrap {
+    width: 28px;
+    height: 28px;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-nav-btn.active::after {
+    left: 0;
+    right: auto;
+    top: 10px;
+    bottom: 10px;
+    width: 2px;
+    height: auto;
+  }
+
+  .members-sidebar-pill--bottom .sidebar-account-chip {
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .members-sidebar-pill--bottom .notif-trigger,
+  .members-sidebar-pill--bottom .sidebar-icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .page-content {
+    padding: 16px 14px 20px;
+  }
+
+  .login-page,
+  .lic-gate-page {
+    padding:
+      max(16px, env(safe-area-inset-top, 0px))
+      16px
+      max(16px, env(safe-area-inset-bottom, 0px));
+    overflow: auto;
+  }
+
+  .login-card,
+  .lic-gate-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .operacoes-bar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 50px;
+    row-gap: 8px;
+  }
+
+  .operacoes-body {
+    flex-direction: column;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .operacoes-left,
+  .operacoes-body .operacoes-panel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    border-right: none;
+  }
+
+  .operacoes-body .operacoes-panel {
+    flex: 0 1 auto;
+    max-height: min(46vh, 420px);
+  }
+
+  .chart-wrap {
+    min-height: 220px;
+  }
+
+  .btn-start,
+  .btn-stop,
+  .lic-gate-submit {
+    min-height: 44px;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-card,
+  .bot-config-sheet {
+    width: 100%;
+    max-width: 100%;
+    max-height: min(92dvh, 100%);
+    border-radius: 18px 18px 0 0;
+  }
+
+  .strategy-grid,
+  .field-row {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .notif-panel {
+    width: min(320px, calc(100vw - 108px)) !important;
+    max-height: min(70dvh, calc(100dvh - 24px));
+  }
+
+  img, video, iframe {
+    max-width: 100%;
+  }
+}
