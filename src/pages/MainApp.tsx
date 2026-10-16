@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Operacoes from './Operacoes'
 import Aulas from './Aulas'
 import Suporte from './Suporte'
@@ -92,6 +92,17 @@ const NAV: { id: Tab; label: string; icon: typeof IconAulas }[] = [
 export default function MainApp({ onLogout }: Props) {
   const [tab, setTab] = useState<Tab>('operacoes')
   const [loggingOut, setLoggingOut] = useState(false)
+  const [compact, setCompact] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 860px)')
+    const onChange = () => setCompact(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   async function handleLogout() {
     if (loggingOut) return
@@ -109,7 +120,28 @@ export default function MainApp({ onLogout }: Props) {
   }
 
   return (
-    <div className="mainapp members-shell members-shell--bottom-nav">
+    <div className={`mainapp members-shell members-shell--bottom-nav${compact ? ' members-shell--compact' : ''}`}>
+      {compact && (
+        <header className="members-topbar">
+          <SidebarLogoMark />
+          <div className="members-topbar-actions">
+            <div className="sidebar-notify-slot">
+              <NotificationBell />
+            </div>
+            <button
+              type="button"
+              className="sidebar-icon-btn sidebar-icon-btn--logout"
+              onClick={() => void handleLogout()}
+              disabled={loggingOut}
+              aria-label="Sair"
+              title="Sair"
+            >
+              <IconLogout className="sidebar-icon-btn-svg" />
+            </button>
+          </div>
+        </header>
+      )}
+
       <div className="members-main">
         <div className="mainapp-body">
           <div className="tab-panel" style={{ display: tab === 'aulas' ? 'contents' : 'none' }}>
@@ -126,9 +158,11 @@ export default function MainApp({ onLogout }: Props) {
 
       <aside className="members-sidebar members-sidebar--bottom" aria-label="Barra inferior">
         <div className="members-sidebar-pill members-sidebar-pill--floating members-sidebar-pill--bottom">
-          <div className="sidebar-zone sidebar-zone--brand">
-            <SidebarLogoMark />
-          </div>
+          {!compact && (
+            <div className="sidebar-zone sidebar-zone--brand">
+              <SidebarLogoMark />
+            </div>
+          )}
 
           <nav className="sidebar-zone sidebar-zone--nav" aria-label="Secções">
             {NAV.map(({ id, label, icon: Icon }) => {
@@ -144,6 +178,7 @@ export default function MainApp({ onLogout }: Props) {
                     isCta ? 'sidebar-nav-btn--operacoes' : '',
                     active ? 'active' : '',
                   ].filter(Boolean).join(' ')}
+                  aria-current={active ? 'page' : undefined}
                   onClick={() => setTab(id)}
                 >
                   <span className="sidebar-nav-iconWrap">
@@ -155,6 +190,7 @@ export default function MainApp({ onLogout }: Props) {
             })}
           </nav>
 
+          {!compact && (
           <div className="sidebar-zone sidebar-zone--footer">
             <div className="sidebar-actions">
               <div className="sidebar-account-chip" title="Conta conectada">
@@ -184,6 +220,7 @@ export default function MainApp({ onLogout }: Props) {
               </div>
             </div>
           </div>
+          )}
         </div>
       </aside>
     </div>
