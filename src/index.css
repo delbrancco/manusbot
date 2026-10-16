@@ -6478,6 +6478,20 @@ select:focus,
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
+
+  .members-shell--compact .mainapp-body,
+  .members-shell--compact .operacoes,
+  .members-shell--compact .page-content,
+  .members-shell--compact .page-content.aulas-page {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
   }
 
   .members-shell--compact .members-sidebar--bottom {
@@ -6593,9 +6607,10 @@ select:focus,
 
   .operacoes-body {
     flex-direction: column;
+    flex: none;
+    height: auto;
     min-height: 0;
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
   }
 
   .operacoes-left,
@@ -6604,14 +6619,29 @@ select:focus,
     max-width: 100%;
     min-width: 0;
     border-right: none;
+    flex: none;
+    height: auto;
+    max-height: none;
+    overflow: visible;
   }
 
-  .operacoes-body .operacoes-panel {
-    flex: 0 1 auto;
-    max-height: min(46vh, 420px);
+  .operacoes-left {
+    min-height: 0;
   }
 
-  .chart-wrap { min-height: 220px; }
+  .chart-wrap {
+    flex: none;
+    height: 46vh;
+    min-height: 240px;
+  }
+
+  .members-shell--compact .tradelog,
+  .members-shell--compact .tradelog-body {
+    overflow: visible;
+    height: auto;
+    max-height: none;
+    flex: none;
+  }
 
   .btn-start,
   .btn-stop,
