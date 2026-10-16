@@ -81,6 +81,9 @@ export class BotEngine extends EventEmitter {
   /** Retry HARD após rejeição transitória (máx. HARD_MAX_RETRIES). */
   private pendingHardTimer: ReturnType<typeof setTimeout> | null = null
   private hardRetryCount = 0
+  /** Dispara a Prime na janela da vela mesmo se a cotação não cair entre 0,5s e 4,5s. */
+  private primeTimer: ReturnType<typeof setTimeout> | null = null
+  private primeArmedFor = 0
   /** Entrar na janela segura da próxima vela (1,5–4,5s após :00). */
   private static readonly HARD_SAFE_ENTRY_MS = 1_800
   private static readonly HARD_MAX_RETRIES = 3
@@ -160,6 +163,7 @@ export class BotEngine extends EventEmitter {
       clearTimeout(this.pendingHardTimer)
       this.pendingHardTimer = null
     }
+    this.clearPrimeTimer()
     this.paused = false
     this.openTradeIdSnapshot = null
     this.emit('stopped', this.getStatus())
@@ -192,6 +196,7 @@ export class BotEngine extends EventEmitter {
         this.engine?.notifyHardOrderSettled()
       }
     }
+    this.clearPrimeTimer()
     this.log('💤 Sistema dormindo — bot pausado')
     this.emit('paused')
   }
@@ -214,6 +219,7 @@ export class BotEngine extends EventEmitter {
       this.hardRetryCount = 0
       if (wasHard) this.engine?.notifyHardOrderSettled()
     }
+    this.armPrimeTimer()
     this.emit('resumed')
   }
 
@@ -244,8 +250,10 @@ export class BotEngine extends EventEmitter {
           for (const h of historicalCandles) {
             this.replayHistoricalCandle(h)
           }
+          this.engine?.clearPrimeLatch()
           this.warming = false
           this.log('✅ Aquecimento concluído — monitorando ao vivo')
+          this.armPrimeTimer()
         }
         this.handleLiveCandle(rawCandle)
       }
@@ -263,7 +271,7 @@ export class BotEngine extends EventEmitter {
   /** Replay histórico na engine (sem IPC). Enquanto `warming`, entradas ficam bloqueadas. */
   private replayHistoricalCandle(raw: { from: number; open: number; close: number; min: number; max: number }): void {
     if (!this.running || !this.engine || !this.config) return
-    this.engine.process(raw as Candle)
+    this.engine.process(raw as Candle, { replay: true })
   }
 
   /** Vela ao vivo: renderer (update) + estratégia. */
@@ -276,13 +284,16 @@ export class BotEngine extends EventEmitter {
       if (oldest !== undefined) this.chartCandles.delete(oldest)
     }
     this.emit('candle', candle)
-    const events = this.engine.process(candle)
+    this.applyStrategyEvents(this.engine.process(candle))
+    this.armPrimeTimer()
+  }
+
+  private applyStrategyEvents(events: StrategyEvent[]): void {
     for (const ev of events) {
       if (ev.type === 'enter') void this.onStrategyEnter(ev)
       else if (ev.type === 'result') this.onStrategyResult(ev)
       else if (ev.type === 'hard_stuck_recovered') {
-        this.log('⚠️ HARD: operação travada recuperada')
-        // A strategy já liberou hardTradeOpen; só limpa locks do bot.
+        this.log('⚠️ Prime: operação travada recuperada')
         this.hardRetryCount = 0
         if (this.pendingHardTimer) {
           clearTimeout(this.pendingHardTimer)
@@ -297,7 +308,83 @@ export class BotEngine extends EventEmitter {
             this.openTradeTimeout = null
           }
         }
+        this.armPrimeTimer()
       }
+    }
+  }
+
+  private latestCandle(): Candle | null {
+    let best: Candle | null = null
+    for (const candle of this.chartCandles.values()) {
+      if (!best || candle.from > best.from) best = candle
+    }
+    return best
+  }
+
+  /** Espera até 1,8s–4,2s da vela M1, respeitando o cooldown da Prime. */
+  private msUntilPrimeWindow(now = Date.now()): number {
+    const candle = this.latestCandle()
+    const cooldownAt = this.engine?.primeCooldownUntil() ?? 0
+    const openMs = candle ? candle.from * 1000 : now - (now % 60_000)
+    const seen = candle ? this.engine?.hasPrimeSeen(candle.from) === true : false
+    let target = openMs + BotEngine.HARD_SAFE_ENTRY_MS
+    const windowEnd = openMs + 4_200
+    if (seen || Math.max(now, cooldownAt) > windowEnd) {
+      const nextOpen = openMs + 60_000
+      target = nextOpen + BotEngine.HARD_SAFE_ENTRY_MS
+      if (cooldownAt > nextOpen + 4_200) {
+        const base = Math.ceil(cooldownAt / 60_000) * 60_000
+        target = base + BotEngine.HARD_SAFE_ENTRY_MS
+        if (target < cooldownAt) target += 60_000
+      }
+    } else {
+      target = Math.max(target, cooldownAt)
+    }
+    return Math.max(0, target - now)
+  }
+
+  private clearPrimeTimer(): void {
+    if (this.primeTimer) {
+      clearTimeout(this.primeTimer)
+      this.primeTimer = null
+    }
+  }
+
+  private armPrimeTimer(): void {
+    if (!this.config?.strategies.hard || !this.running || this.paused) return
+    if (this.primeTimer || this.pendingHardTimer || this.openTradeId || this.entryInFlight) return
+    if (this.engine?.isHardBlocking()) return
+    const delay = this.msUntilPrimeWindow()
+    if (delay > 5_000 && this.primeArmedFor !== Math.floor(Date.now() / 60_000)) {
+      this.primeArmedFor = Math.floor(Date.now() / 60_000)
+      this.log(`Prime: próxima entrada na janela da vela (em ${Math.ceil(delay / 1000)}s)`)
+    }
+    this.primeTimer = setTimeout(() => {
+      this.primeTimer = null
+      this.firePrimeWindow()
+    }, delay)
+  }
+
+  private firePrimeWindow(): void {
+    if (!this.running || this.paused || !this.engine || !this.config?.strategies.hard) return
+    if (this.openTradeId || this.entryInFlight || this.pendingHardTimer || this.engine.isHardBlocking()) return
+    const delay = this.msUntilPrimeWindow()
+    if (delay > 250) {
+      this.armPrimeTimer()
+      return
+    }
+    const candle = this.latestCandle()
+    const age = candle ? Date.now() - candle.from * 1000 : -1
+    if (!candle || age < 500 || age >= 4_500) {
+      this.primeTimer = setTimeout(() => {
+        this.primeTimer = null
+        this.firePrimeWindow()
+      }, 400)
+      return
+    }
+    this.applyStrategyEvents(this.engine.process(candle))
+    if (!this.engine.isHardBlocking() && !this.openTradeId && !this.entryInFlight) {
+      this.armPrimeTimer()
     }
   }
 
@@ -338,7 +425,7 @@ export class BotEngine extends EventEmitter {
 
     if (this.hardRetryCount >= BotEngine.HARD_MAX_RETRIES) {
       this.log(
-        `❌ HARD: desistindo após ${BotEngine.HARD_MAX_RETRIES} tentativas — ${reason}`,
+        `❌ Prime: desistindo após ${BotEngine.HARD_MAX_RETRIES} tentativas — ${reason}`,
       )
       trackError(new Error(`HARD max retries: ${reason}`), {
         context: 'hard_max_retries',
@@ -355,7 +442,7 @@ export class BotEngine extends EventEmitter {
     const msToNext = 60_000 - (Date.now() % 60_000)
     const delay = msToNext + BotEngine.HARD_SAFE_ENTRY_MS
     this.log(
-      `⏳ HARD: ${reason} — tentativa ${this.hardRetryCount}/${BotEngine.HARD_MAX_RETRIES} ` +
+      `⏳ Prime: ${reason} — tentativa ${this.hardRetryCount}/${BotEngine.HARD_MAX_RETRIES} ` +
       `na janela segura (em ${(delay / 1000).toFixed(1)}s)`,
     )
 
@@ -385,7 +472,10 @@ export class BotEngine extends EventEmitter {
       clearTimeout(this.openTradeTimeout)
       this.openTradeTimeout = null
     }
-    if (wasHard) this.engine?.notifyHardOrderSettled()
+    if (wasHard) {
+      this.engine?.notifyHardOrderSettled()
+      this.armPrimeTimer()
+    }
   }
 
   private async executeEntry(ev: StrategyEvent): Promise<void> {
@@ -396,7 +486,7 @@ export class BotEngine extends EventEmitter {
     const stake = this.computeStake()
     const balanceSnap = this.sdk.getBalanceSnapshot(this.config.balanceId)
     const cur = balanceSnap?.currency ?? 'USD'
-    this.log(`📍 ${ev.strategy}: ${ev.direction} | ${this.config.activeTicker} | ${stake.toFixed(2)} ${cur}`)
+    this.log(`📍 ${ev.strategy === 'HARD' ? 'Prime' : ev.strategy}: ${ev.direction} | ${this.config.activeTicker} | ${stake.toFixed(2)} ${cur}`)
     try {
       const order = await this.sdk.placeTrade({
         activeId: this.config.activeId,
@@ -475,6 +565,7 @@ export class BotEngine extends EventEmitter {
       }
     } finally {
       this.entryInFlight = false
+      this.armPrimeTimer()
     }
   }
 
@@ -503,7 +594,10 @@ export class BotEngine extends EventEmitter {
       // Lock bateu sem registro — libera PnL e HARD para não travar o bot.
       if (matchedLock) {
         this.balanceCurrent += profit
-        if (strategy === 'HARD') this.engine?.notifyHardOrderSettled()
+        if (strategy === 'HARD') {
+          this.engine?.notifyHardOrderSettled()
+          this.armPrimeTimer()
+        }
         this.emitStatus()
       }
       return
@@ -546,9 +640,12 @@ export class BotEngine extends EventEmitter {
       }
     }
 
-    this.log(`${isWin ? '✅ WIN' : '❌ LOSS'} | ${trade.strategy} | ${trade.direction} | ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`)
+    this.log(`${isWin ? '✅ WIN' : '❌ LOSS'} | ${trade.strategy === 'HARD' ? 'Prime' : trade.strategy} | ${trade.direction} | ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`)
     this.emit('trade_result', trade)
-    if (trade.strategy === 'HARD') this.engine?.notifyHardOrderSettled()
+    if (trade.strategy === 'HARD') {
+      this.engine?.notifyHardOrderSettled()
+      this.armPrimeTimer()
+    }
     this.checkStops()
     this.emitStatus()
 

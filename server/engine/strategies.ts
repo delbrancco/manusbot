@@ -83,8 +83,32 @@ export class StrategyEngine {
     this.config = config
   }
 
-  // Feed a new (or updated) candle into the engine
-  process(candle: Candle): StrategyEvent[] {
+  /** Prime ainda está com uma entrada armada (ordem não liquidada). */
+  isHardBlocking(): boolean {
+    return this.hardTradeOpen
+  }
+
+  /** Próximo instante em que a Prime aceita outra entrada. */
+  primeCooldownUntil(): number {
+    return this.hardNextEntryTime
+  }
+
+  hasPrimeSeen(from: number): boolean {
+    return this.hardSeenFrom.has(from)
+  }
+
+  /** Limpa o estado da Prime depois do replay do histórico, sem cooldown. */
+  clearPrimeLatch(): void {
+    this.hardTradeOpen = false
+    this.hardDirection = null
+    this.hardEnteredAt = 0
+    this.hardSeenFrom.clear()
+    this.hardNextEntryTime = 0
+  }
+
+  // Feed a new (or updated) candle into the engine.
+  // replay: histórico do gráfico — não pode armar a Prime nem consumir a vela atual.
+  process(candle: Candle, options?: { replay?: boolean }): StrategyEvent[] {
     const events: StrategyEvent[] = []
     const T = candle.from           // seconds
     const nowMs = Date.now()
@@ -92,7 +116,7 @@ export class StrategyEngine {
     this.candles.set(T, candle)
 
     // ── HARD dominates when active ─────────────────────────────────────────
-    if (this.config.hard) {
+    if (this.config.hard && !options?.replay) {
       const hardEvents = this.processHard(T, nowMs)
       events.push(...hardEvents)
       if (hardEvents.some(e => e.type === 'enter') || this.hardTradeOpen) {
