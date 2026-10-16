@@ -108,6 +108,19 @@ function scheduleRelease(activeId: number): void {
   }, 20_000)
 }
 
+export async function loadChartHistory(ticker: string): Promise<{ candles: LiveCandle[]; error?: undefined } | { candles?: undefined; error: string }> {
+  const session = chartSession()
+  if (!session) {
+    return { error: 'Entre na versão oficial com a corretora para liberar o gráfico ao vivo.' }
+  }
+  const active = await resolveActive(session.sdk, ticker)
+  if (!active) return { error: `Ativo ${ticker} não encontrado na corretora.` }
+  const feed = await ensureFeed(session.sdk, active.id)
+  const candles = [...feed.candles.values()].sort((a, b) => a.from - b.from)
+  if (feed.listeners.size === 0) scheduleRelease(active.id)
+  return { candles }
+}
+
 export async function openChartStream(
   ticker: string,
   send: (event: string, data: unknown) => void,

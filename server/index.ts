@@ -18,7 +18,7 @@ import {
   stopBot,
   type Session,
 } from './session-store'
-import { cleanTicker, openChartStream } from './chart-hub'
+import { cleanTicker, loadChartHistory, openChartStream } from './chart-hub'
 
 const COOKIE = 'mb_sid'
 const EMAIL_COOKIE = 'mb_email'
@@ -279,6 +279,25 @@ app.get('/api/bot/status', (req, res) => {
 app.get('/api/bot/chart-snapshot', (req, res) => {
   const session = requireSession(req, res)
   res.json(session.bot.getChartCandles())
+})
+
+app.get('/api/chart/history', async (req, res) => {
+  const ticker = cleanTicker(req.query.ticker)
+  if (!ticker) {
+    res.status(400).json({ error: 'Ativo inválido.' })
+    return
+  }
+  try {
+    const result = await loadChartHistory(ticker)
+    if (result.error) {
+      res.status(503).json(result)
+      return
+    }
+    res.json(result.candles)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Falha ao abrir o gráfico'
+    res.status(500).json({ error: message })
+  }
 })
 
 app.get('/api/chart/stream', async (req, res) => {
