@@ -288,7 +288,7 @@ app.get('/api/chart/history', async (req, res) => {
     return
   }
   try {
-    const result = await loadChartHistory(ticker)
+    const result = await loadChartHistory(ticker, requireSession(req, res))
     if (result.error) {
       res.status(503).json(result)
       return
@@ -330,7 +330,7 @@ app.get('/api/chart/stream', async (req, res) => {
   try {
     const live = await openChartStream(ticker, send, (done) => {
       release = done
-    })
+    }, requireSession(req, res))
     if (!live) res.end()
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Falha ao abrir o gráfico'

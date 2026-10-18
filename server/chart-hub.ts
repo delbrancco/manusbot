@@ -1,5 +1,4 @@
 import type { Session } from './session-store'
-import { connectedSessions } from './session-store'
 import type { ActiveInfo, SdkBridge } from './engine/sdk-bridge'
 
 export interface LiveCandle {
@@ -22,10 +21,9 @@ interface Feed {
 const feeds = new Map<number, Feed>()
 const opening = new Map<number, Promise<Feed>>()
 
-function chartSession(): Session | null {
-  const list = connectedSessions()
-  if (!list.length) return null
-  return list.sort((a, b) => b.lastSeenAt - a.lastSeenAt)[0]
+function chartOwner(session?: Session | null): Session | null {
+  if (session?.sdk.isConnected()) return session
+  return null
 }
 
 function norm(value: string): string {
@@ -108,14 +106,14 @@ function scheduleRelease(activeId: number): void {
   }, 20_000)
 }
 
-export async function loadChartHistory(ticker: string): Promise<{ candles: LiveCandle[]; error?: undefined } | { candles?: undefined; error: string }> {
-  const session = chartSession()
-  if (!session) {
-    return { error: 'Entre na versão oficial com a corretora para liberar o gráfico ao vivo.' }
+export async function loadChartHistory(ticker: string, session?: Session | null): Promise<{ candles: LiveCandle[]; error?: undefined } | { candles?: undefined; error: string }> {
+  const owner = chartOwner(session)
+  if (!owner) {
+    return { error: 'Entre com a corretora para ver o gráfico.' }
   }
-  const active = await resolveActive(session.sdk, ticker)
+  const active = await resolveActive(owner.sdk, ticker)
   if (!active) return { error: `Ativo ${ticker} não encontrado na corretora.` }
-  const feed = await ensureFeed(session.sdk, active.id)
+  const feed = await ensureFeed(owner.sdk, active.id)
   const candles = [...feed.candles.values()].sort((a, b) => a.from - b.from)
   if (feed.listeners.size === 0) scheduleRelease(active.id)
   return { candles }
@@ -125,18 +123,19 @@ export async function openChartStream(
   ticker: string,
   send: (event: string, data: unknown) => void,
   onClose: (release: () => void) => void,
+  session?: Session | null,
 ): Promise<boolean> {
-  const session = chartSession()
-  if (!session) {
-    send('status', { error: 'Entre na versão oficial com a corretora para liberar o gráfico ao vivo.' })
+  const owner = chartOwner(session)
+  if (!owner) {
+    send('status', { error: 'Entre com a corretora para ver o gráfico.' })
     return false
   }
-  const active = await resolveActive(session.sdk, ticker)
+  const active = await resolveActive(owner.sdk, ticker)
   if (!active) {
     send('status', { error: `Ativo ${ticker} não encontrado na corretora.` })
     return false
   }
-  const feed = await ensureFeed(session.sdk, active.id)
+  const feed = await ensureFeed(owner.sdk, active.id)
   if (feed.releaseTimer) {
     clearTimeout(feed.releaseTimer)
     feed.releaseTimer = null
